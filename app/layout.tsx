@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Vintage CRT File Explorer",
+  title: "Explora",
   description: "A retro CRT-style file explorer with vintage terminal aesthetics",
 };
 

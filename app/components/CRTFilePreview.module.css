@@ -5,29 +5,54 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.9);
+  background: rgba(0, 0, 0, 0.95);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
-  backdrop-filter: blur(5px);
+  backdrop-filter: blur(8px);
 }
 
 .previewWindow {
-  background: #001100;
-  border: 4px solid #00aa00;
-  border-radius: 8px;
+  background: #000000;
+  border: 8px solid #1a3a1a;
+  border-radius: 16px;
   max-width: 90vw;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   box-shadow: 
-    0 0 40px rgba(0, 255, 0, 0.3),
-    inset 0 0 100px rgba(0, 80, 0, 0.2);
+    0 0 80px rgba(0, 255, 0, 0.4),
+    0 0 40px rgba(0, 255, 0, 0.2),
+    inset 0 0 150px rgba(0, 80, 0, 0.3),
+    inset 0 0 80px rgba(0, 200, 0, 0.1),
+    0 20px 60px rgba(0, 0, 0, 0.8);
   position: relative;
+  /* CRT bezel/TV frame effect */
+  overflow: hidden;
 }
 
-/* Scanline effect */
+/* CRT Bezel 3D effect */
+.previewWindow::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 3px solid;
+  border-color: 
+    #ffffff 
+    #1a1a1a 
+    #1a1a1a 
+    #ffffff;
+  border-radius: 13px;
+  pointer-events: none;
+  z-index: 4;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Scanline effect - authentic CRT horizontal lines */
 .previewWindow::before {
   content: '';
   position: absolute;
@@ -35,15 +60,26 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(
+  background: repeating-linear-gradient(
     to bottom,
-    transparent 50%,
-    rgba(0, 20, 0, 0.1) 50%
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
   );
-  background-size: 100% 4px;
-  z-index: 1;
+  z-index: 3;
   pointer-events: none;
-  border-radius: 4px;
+  border-radius: 13px;
+}
+
+/* Screen glass reflection */
+.previewWindow {
+  background-image: 
+    radial-gradient(
+      ellipse at 20% 30%,
+      rgba(255, 255, 255, 0.08) 0%,
+      transparent 40%
+    );
 }
 
 /* Header */
@@ -114,6 +150,32 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  background: #001100;
+  /* CRT glow effect on content area */
+  background-image: 
+    radial-gradient(
+      ellipse at center,
+      rgba(0, 200, 0, 0.05) 0%,
+      transparent 70%
+    );
+}
+
+/* CRT screen chromatic aberration effect for videos */
+.previewContent::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: 
+    radial-gradient(
+      ellipse at center,
+      transparent 0%,
+      rgba(0, 0, 0, 0.1) 100%
+    );
+  z-index: 1;
 }
 
 /* Loading State */
@@ -165,8 +227,11 @@
   max-height: 100%;
   object-fit: contain;
   transition: transform 0.3s ease;
-  image-rendering: auto;
-  filter: drop-shadow(0 0 20px rgba(0, 255, 0, 0.3));
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter: drop-shadow(0 0 20px rgba(0, 255, 0, 0.3)) contrast(1.05);
+  border: 1px solid rgba(0, 200, 0, 0.4);
+  box-shadow: inset 0 0 15px rgba(0, 50, 0, 0.3);
 }
 
 /* Audio Preview */
@@ -189,6 +254,9 @@
   border: 2px solid #00aa00;
   border-radius: 8px;
   background: #000;
+  box-shadow: 
+    0 0 30px rgba(0, 255, 0, 0.2),
+    inset 0 0 20px rgba(0, 50, 0, 0.4);
 }
 
 .visualizationCanvas {
@@ -196,8 +264,11 @@
   width: 100%;
   height: auto;
   max-height: 200px;
-  image-rendering: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
   border-radius: 4px;
+  filter: drop-shadow(0 0 10px rgba(0, 255, 0, 0.4));
+  background: #001100;
 }
 
 .visualEffectSelector {
@@ -227,6 +298,269 @@
   background: #006600;
 }
 
+/* Visualization Controls */
+.visualizationControls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: #000800;
+  border: 1px solid #00aa00;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.controlRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.controlLabel {
+  color: #00ff00;
+  font-weight: bold;
+  min-width: 70px;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 5px #00ff00;
+}
+
+.controlSlider {
+  flex: 1;
+  height: 14px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(
+    to right,
+    #003300,
+    #006600
+  );
+  border: 1px solid #00aa00;
+  border-radius: 7px;
+  outline: none;
+  cursor: pointer;
+  box-shadow: 
+    inset 0 0 8px rgba(0, 50, 0, 0.3),
+    0 0 10px rgba(0, 200, 0, 0.2);
+}
+
+.controlSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, #00ff00, #00aa00);
+  border: 2px solid #003300;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(0, 255, 0, 0.6);
+}
+
+.controlSlider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, #00ff00, #00aa00);
+  border: 2px solid #003300;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(0, 255, 0, 0.6);
+}
+
+.controlValue {
+  color: #00ff00;
+  min-width: 40px;
+  text-align: right;
+  font-weight: bold;
+  text-shadow: 0 0 5px #00ff00;
+  font-family: 'Courier New', monospace;
+}
+
+/* Fullscreen Button */
+.fullscreenBtn {
+  background: #004400;
+  border: 1px solid #00aa00;
+  color: #00ff00;
+  padding: 4px 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-shadow: 0 0 5px #00ff00;
+}
+
+.fullscreenBtn:hover {
+  background: #006600;
+  box-shadow: 0 0 12px rgba(0, 255, 0, 0.5);
+  border-color: #00ff00;
+}
+
+/* Fullscreen Visualizer */
+.fullscreenVisualizerOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.fullscreenVisualizerContainer {
+  position: relative;
+  width: 90vw;
+  height: 90vh;
+  background: #000000;
+  border: 8px solid #1a3a1a;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 
+    0 0 100px rgba(0, 255, 0, 0.5),
+    0 0 50px rgba(0, 200, 0, 0.3),
+    inset 0 0 150px rgba(0, 80, 0, 0.3),
+    0 0 0 2px rgba(0, 0, 0, 0.8);
+  cursor: default;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.fullscreenVisualizerContainer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+.fullscreenVisualizerContainer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  border: 8px solid transparent;
+  border-top-color: #3a6a3a;
+  border-left-color: #3a6a3a;
+  border-bottom-color: #0a1a0a;
+  border-right-color: #0a1a0a;
+  border-radius: 16px;
+  box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.08);
+  z-index: 3;
+}
+
+.fullscreenCanvas {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter: drop-shadow(0 0 10px rgba(0, 255, 0, 0.4));
+  background: #001100;
+  position: relative;
+  z-index: 1;
+}
+
+.fullscreenControls {
+  display: flex;
+  gap: 20px;
+  padding: 15px 20px;
+  background: #000800;
+  border-top: 1px solid #00aa00;
+  position: relative;
+  z-index: 3;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.fullscreenControls .controlRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.fullscreenControls .controlLabel {
+  color: #00ff00;
+  font-weight: bold;
+  min-width: 70px;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 5px #00ff00;
+}
+
+.fullscreenControls .controlSlider {
+  width: 150px;
+  height: 14px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(
+    to right,
+    #003300,
+    #006600
+  );
+  border: 1px solid #00aa00;
+  border-radius: 7px;
+  outline: none;
+  cursor: pointer;
+  box-shadow: 
+    inset 0 0 8px rgba(0, 50, 0, 0.3),
+    0 0 10px rgba(0, 200, 0, 0.2);
+}
+
+.effectSelectFullscreen {
+  background: #004400;
+  border: 1px solid #00aa00;
+  color: #00ff00;
+  padding: 4px 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.effectSelectFullscreen:hover {
+  background: #006600;
+}
+
+.exitFullscreenBtn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: #110000;
+  border: 2px solid #aa0000;
+  color: #ff6666;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  cursor: pointer;
+  border-radius: 3px;
+  z-index: 4;
+  transition: all 0.2s;
+  font-weight: bold;
+  text-shadow: 0 0 5px #ff0000;
+}
+
+.exitFullscreenBtn:hover {
+  background: #220000;
+  box-shadow: 0 0 15px rgba(255, 0, 0, 0.5);
+}
+
 .audioInfo {
   display: flex;
   align-items: center;
@@ -236,6 +570,9 @@
   border-radius: 8px;
   background: rgba(0, 40, 0, 0.3);
   min-width: 300px;
+  box-shadow: 
+    0 0 20px rgba(0, 200, 0, 0.2),
+    inset 0 0 15px rgba(0, 50, 0, 0.3);
 }
 
 .audioVisualizer {
@@ -278,6 +615,146 @@
   color: #00cc00;
 }
 
+/* Playlist Panel */
+.playlistPanelContainer {
+  width: 100%;
+  border-top: 2px solid #00aa00;
+  margin-top: 15px;
+  background: #001100;
+}
+
+.playlistPanelToggle {
+  width: 100%;
+  padding: 12px;
+  background: #002200;
+  border: none;
+  border-bottom: 1px solid #00aa00;
+  color: #00ff00;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.playlistPanelToggle:hover {
+  background: #003300;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+}
+
+.playlistPanel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 15px;
+  background: rgba(0, 17, 0, 0.8);
+  max-height: 300px;
+  overflow-y: auto;
+  border-bottom: 1px solid #00aa00;
+}
+
+.playlistSectionTitle {
+  font-size: 11px;
+  font-weight: bold;
+  color: #00ff00;
+  padding: 5px;
+  border-bottom: 1px solid #00aa00;
+  margin-bottom: 10px;
+  text-shadow: 0 0 5px #00ff00;
+}
+
+.playlistAvailable,
+.playlistCurrent {
+  display: flex;
+  flex-direction: column;
+}
+
+.availableList,
+.currentList {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #00aa00;
+  background: rgba(0, 20, 0, 0.5);
+  border-radius: 4px;
+  max-height: 200px;
+}
+
+.availableItem,
+.playlistItemInPanel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #003300;
+  font-size: 11px;
+  color: #00cc00;
+  transition: all 0.2s;
+}
+
+.availableItem:hover,
+.playlistItemInPanel:hover {
+  background: #002200;
+  color: #00ff00;
+}
+
+.availableItem:last-child,
+.playlistItemInPanel:last-child {
+  border-bottom: none;
+}
+
+.itemNumber {
+  color: #00aa00;
+  font-weight: bold;
+  min-width: 25px;
+}
+
+.itemName {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemSize {
+  color: #008800;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.addToPlaylistBtn {
+  background: #004400;
+  border: 1px solid #00aa00;
+  color: #00ff00;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.addToPlaylistBtn:hover:not(:disabled) {
+  background: #006600;
+  box-shadow: 0 0 8px #00ff00;
+}
+
+.addToPlaylistBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: #00aa00;
+}
+
+.emptyMessage {
+  padding: 20px;
+  text-align: center;
+  color: #00aa00;
+  font-size: 11px;
+  font-style: italic;
+}
+
 /* Video Preview */
 .videoPreview {
   display: flex;
@@ -292,7 +769,13 @@
   max-height: 100%;
   border: 2px solid #00aa00;
   border-radius: 4px;
-  box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+  box-shadow: 
+    0 0 30px rgba(0, 255, 0, 0.3),
+    0 0 60px rgba(0, 200, 0, 0.15),
+    inset 0 0 20px rgba(0, 50, 0, 0.2);
+  filter: contrast(1.08) saturate(1.1);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 /* Text Preview */
@@ -314,6 +797,8 @@
   background: rgba(0, 40, 0, 0.2);
   border: 1px solid #00aa00;
   border-radius: 4px;
+  text-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+  box-shadow: inset 0 0 15px rgba(0, 50, 0, 0.3);
 }
 
 /* PDF & Unsupported Preview */

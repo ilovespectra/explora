@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './CRTFileExplorer.module.css';
 import CRTFilePreview from './CRTFilePreview';
 import FileManagement from './FileManagement';
+import SortaOrganizer from './SortaOrganizer';
 
 const CRTFileExplorer = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -225,6 +226,9 @@ const CRTFileExplorer = () => {
         );
         setPlaylist(audioFiles);
       }
+    } else if (tool === 'sorta') {
+      // Sorta organizer tool
+      console.log('Opening Sorta File Organizer');
     }
   };
 
@@ -672,7 +676,7 @@ const CRTFileExplorer = () => {
         <div className={styles.scanlines}></div>
         <div className={styles.restoreButton} onClick={() => setIsMinimized(false)}>
           <div className={styles.crtIcon}>📺</div>
-          <span>CRT FILE EXPLORER</span>
+          <span>EXPLORA</span>
           <div className={styles.clickToRestore}>CLICK TO RESTORE</div>
         </div>
       </div>
@@ -699,7 +703,7 @@ const CRTFileExplorer = () => {
               <div className={styles.header}>
                 <div className={styles.titleBar}>
                   <span className={styles.title}>
-                    CRT FILE EXPLORER v2.0 {previewMode && `- PREVIEW: ${selectedFile?.name}`}
+                    EXPLORA v2.0 {previewMode && `- PREVIEW: ${selectedFile?.name}`}
                     {activeTool === 'mediaPlayer' && ' - MEDIA PLAYER'}
                   </span>
                   <div className={styles.controls}>
@@ -829,9 +833,9 @@ const CRTFileExplorer = () => {
                       <div className={styles.dropdownMenu}>
                         <div 
                           className={styles.dropdownItem}
-                          onClick={() => handleToolsMenu('mediaPlayer')}
+                          onClick={() => handleToolsMenu('sorta')}
                         >
-                          Media Player
+                          Sorta File Organizer
                         </div>
                         <div className={styles.dropdownItem}>
                           File Converter
@@ -853,7 +857,7 @@ const CRTFileExplorer = () => {
                     {showHelpMenu && (
                       <div className={styles.dropdownMenu}>
                         <div className={styles.dropdownItem}>
-                          About CRT File Explorer
+                          About Explora
                         </div>
                         <div className={styles.dropdownDivider}></div>
                         <div className={styles.dropdownItem}>
@@ -1002,162 +1006,16 @@ const CRTFileExplorer = () => {
                 <CRTFilePreview 
                   file={selectedFile} 
                   onClose={closePreview}
+                  allAudioFiles={files.filter(f => f.kind === 'Audio')}
+                  onAddToPlaylist={addToPlaylist}
+                  currentPlaylist={playlist}
                 />
               )}
 
-              {/* Media Player Tool */}
-              {activeTool === 'mediaPlayer' && (
-                <div className={styles.mediaPlayerTool}>
-                  <div className={styles.toolHeader}>
-                    <button className={styles.toolbarBtn} onClick={closeTool}>
-                      ← BACK TO FILES
-                    </button>
-                    <span className={styles.toolTitle}>MEDIA PLAYER</span>
-                    <div className={styles.visualEffectSelector}>
-                      <span>VISUAL EFFECT:</span>
-                      <select 
-                        value={visualEffect} 
-                        onChange={(e) => setVisualEffect(e.target.value)}
-                        className={styles.effectSelect}
-                      >
-                        <option value="soundbars">Sound Bars</option>
-                        <option value="waves">Sound Waves</option>
-                        <option value="particles">Particles</option>
-                      </select>
-                    </div>
-                  </div>
 
-                  <div className={styles.mediaPlayerContent}>
-                    <div className={styles.visualizationSection}>
-                      <canvas
-                        ref={canvasRef}
-                        width={800}
-                        height={300}
-                        className={styles.visualizationCanvas}
-                      />
-                    </div>
-
-                    <div className={styles.playlistSection}>
-                      <div className={styles.playlistHeader}>
-                        <span>PLAYLIST ({playlist.length} tracks)</span>
-                        <button 
-                          className={styles.playlistBtn}
-                          onClick={clearPlaylist}
-                          disabled={playlist.length === 0}
-                        >
-                          CLEAR
-                        </button>
-                      </div>
-                      <div className={styles.playlist}>
-                        {playlist.map((track, index) => (
-                          <div
-                            key={index}
-                            className={`${styles.playlistItem} ${
-                              index === currentTrackIndex ? styles.currentTrack : ''
-                            }`}
-                          >
-                            <span className={styles.trackName}>{track.name}</span>
-                            <div className={styles.trackControls}>
-                              {index === currentTrackIndex && (
-                                <span className={styles.playingIndicator}>▶</span>
-                              )}
-                              <button
-                                className={styles.removeBtn}
-                                onClick={() => removeFromPlaylist(index)}
-                              >
-                                ×
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                        {playlist.length === 0 && (
-                          <div className={styles.emptyPlaylist}>
-                            No tracks in playlist. Audio files from your directory will appear here automatically.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className={styles.playerControls}>
-                      <div className={styles.trackInfo}>
-                        {playlist[currentTrackIndex] && (
-                          <>
-                            <span className={styles.currentTrackName}>
-                              {playlist[currentTrackIndex].name}
-                            </span>
-                            <span className={styles.trackDetails}>
-                              {formatTime(currentTime)} / {formatTime(duration)}
-                            </span>
-                          </>
-                        )}
-                      </div>
-
-                      <div className={styles.controlButtons}>
-                        <button 
-                          className={styles.controlBtn}
-                          onClick={handlePreviousTrack}
-                          disabled={playlist.length === 0}
-                        >
-                          ⏮
-                        </button>
-                        <button 
-                          className={styles.playPauseBtn}
-                          onClick={handlePlayPauseMediaPlayer}
-                          disabled={playlist.length === 0}
-                        >
-                          {isPlaying ? '❚❚' : '▶'}
-                        </button>
-                        <button 
-                          className={styles.controlBtn}
-                          onClick={handleNextTrack}
-                          disabled={playlist.length === 0}
-                        >
-                          ⏭
-                        </button>
-                      </div>
-
-                      <div className={styles.progressSection}>
-                        <input
-                          type="range"
-                          min="0"
-                          max={duration || 0}
-                          value={currentTime}
-                          onChange={(e) => handleSeekMediaPlayer(parseFloat(e.target.value))}
-                          className={styles.progressBar}
-                          disabled={playlist.length === 0}
-                        />
-                      </div>
-
-                      <div className={styles.volumeSection}>
-                        <span className={styles.volumeIcon}>🔊</span>
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="1" 
-                          step="0.1" 
-                          defaultValue="1" 
-                          className={styles.volumeBar}
-                          onChange={(e) => {
-                            if (mediaPlayerAudioRef.current) {
-                              mediaPlayerAudioRef.current.volume = e.target.value;
-                            }
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Hidden audio element for media player */}
-                  <audio
-                    ref={mediaPlayerAudioRef}
-                    src={playlist[currentTrackIndex]?.url}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                    onEnded={handleNextTrack}
-                    onTimeUpdate={handleTimeUpdateMediaPlayer}
-                    onLoadedMetadata={handleLoadedMetadataMediaPlayer}
-                  />
-                </div>
+              {/* Sorta File Organizer Tool */}
+              {activeTool === 'sorta' && (
+                <SortaOrganizer onClose={closeTool} />
               )}
             </div>
           </div>

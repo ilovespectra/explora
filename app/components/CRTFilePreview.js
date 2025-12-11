@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import styles from './CRTFilePreview.module.css';
 
-const CRTFilePreview = ({ file, onClose }) => {
+const CRTFilePreview = ({ file, onClose, allAudioFiles = [], onAddToPlaylist, currentPlaylist = [] }) => {
   const [previewMode, setPreviewMode] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -15,10 +15,15 @@ const CRTFilePreview = ({ file, onClose }) => {
   const [error, setError] = useState(null);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [showSpeedControl, setShowSpeedControl] = useState(false);
+  const [showPlaylistPanel, setShowPlaylistPanel] = useState(false);
+  const [isVisualizerFullscreen, setIsVisualizerFullscreen] = useState(false);
   
   // Audio visualization state
   const [visualEffect, setVisualEffect] = useState('soundbars');
   const [frequencyData, setFrequencyData] = useState(new Uint8Array(0));
+  const [colorScale, setColorScale] = useState(0.5); // 0-1 for hue shift
+  const [sensitivity, setSensitivity] = useState(1); // 0.5-2.0 for amplitude boost
+  const [particleVelocity, setParticleVelocity] = useState(new Map()); // Track particle velocities
 
   const audioRef = useRef(null);
   const videoRef = useRef(null);
@@ -28,6 +33,12 @@ const CRTFilePreview = ({ file, onClose }) => {
   const animationRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
+  const particleDataRef = useRef([]);
+  const lastFrequencyRef = useRef(new Uint8Array(0));
+  
+  // Frame rate limiting for "on-twos" animation (12fps)
+  const lastFrameTimeRef = useRef(0);
+  const frameIntervalRef = useRef(1000 / 12); // 12fps = ~83ms per frame
 
   useEffect(() => {
     if (file) {
@@ -59,9 +70,47 @@ const CRTFilePreview = ({ file, onClose }) => {
     };
   }, []);
 
+  // Handle ESC key for fullscreen exit
+  useEffect(() => {
+    const handleKeydown = (e) => {
+      if (e.key === 'Escape' && isVisualizerFullscreen) {
+        setIsVisualizerFullscreen(false);
+      }
+    };
+    
+    if (isVisualizerFullscreen) {
+      window.addEventListener('keydown', handleKeydown);
+      return () => window.removeEventListener('keydown', handleKeydown);
+    }
+  }, [isVisualizerFullscreen]);
+
   // Audio visualization setup - only after audio starts playing
   useEffect(() => {
-    if (previewMode === 'audio' && audioRef.current && isPlaying && !analyserRef.current) {
+    if (previewMode === 'audio' && audioRef.current && isPlaying) {
+      // If analyser already exists, just restart the animation loop
+      if (analyserRef.current) {
+        lastFrameTimeRef.current = 0;
+        const updateVisualization = () => {
+          if (analyserRef.current && canvasRef.current) {
+            const now = performance.now();
+            if (now - lastFrameTimeRef.current >= frameIntervalRef.current) {
+              const dataArray = new Uint8Array(256);
+              analyserRef.current.getByteFrequencyData(dataArray);
+              setFrequencyData(new Uint8Array(dataArray));
+              lastFrameTimeRef.current = now;
+            }
+            animationRef.current = requestAnimationFrame(updateVisualization);
+          }
+        };
+        updateVisualization();
+        return () => {
+          if (animationRef.current) {
+            cancelAnimationFrame(animationRef.current);
+          }
+        };
+      }
+
+      // Setup new analyser if it doesn't exist
       const setupAudioAnalyser = async () => {
         try {
           const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -78,16 +127,20 @@ const CRTFilePreview = ({ file, onClose }) => {
           analyser.connect(audioContext.destination);
           
           analyser.fftSize = 256;
-          const bufferLength = analyser.frequencyBinCount;
-          const dataArray = new Uint8Array(bufferLength);
           
           audioContextRef.current = audioContext;
           analyserRef.current = analyser;
+          lastFrameTimeRef.current = 0;
           
           const updateVisualization = () => {
             if (analyser && canvasRef.current) {
-              analyser.getByteFrequencyData(dataArray);
-              setFrequencyData(new Uint8Array(dataArray));
+              const now = performance.now();
+              if (now - lastFrameTimeRef.current >= frameIntervalRef.current) {
+                const dataArray = new Uint8Array(256);
+                analyser.getByteFrequencyData(dataArray);
+                setFrequencyData(new Uint8Array(dataArray));
+                lastFrameTimeRef.current = now;
+              }
               animationRef.current = requestAnimationFrame(updateVisualization);
             }
           };
@@ -95,11 +148,14 @@ const CRTFilePreview = ({ file, onClose }) => {
           updateVisualization();
         } catch (error) {
           console.error('Audio analysis setup failed:', error);
-          // Visualization failed but audio should still play
         }
       };
       
       setupAudioAnalyser();
+    } else if (!isPlaying && animationRef.current) {
+      // Stop animation when audio pauses
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
     }
     
     return () => {
@@ -118,44 +174,78 @@ const CRTFilePreview = ({ file, onClose }) => {
     const width = canvas.width;
     const height = canvas.height;
     
+    // Apply sensitivity multiplier to frequency data
+    const amplifiedData = new Uint8Array(frequencyData.map(v => 
+      Math.min(255, v * (0.5 + sensitivity * 1.5))
+    ));
+    
     ctx.fillStyle = '#001100';
     ctx.fillRect(0, 0, width, height);
     
     const drawSoundBars = () => {
-      const barWidth = (width / frequencyData.length) * 2.5;
+      const barWidth = (width / amplifiedData.length) * 2.5;
       let x = 0;
       
-      for (let i = 0; i < frequencyData.length; i++) {
-        const barHeight = (frequencyData[i] / 255) * height;
+      // Calculate average frequency for smoother transitions
+      const avgFreq = amplifiedData.reduce((a, b) => a + b) / amplifiedData.length;
+      
+      for (let i = 0; i < amplifiedData.length; i++) {
+        // Smooth bar transitions by comparing with last frame
+        const lastValue = lastFrequencyRef.current[i] || 0;
+        const smoothValue = lastValue * 0.6 + amplifiedData[i] * 0.4;
+        const barHeight = (smoothValue / 255) * height * 0.95;
+        
+        // Dynamic color based on bar height and colorScale - FIX: Apply colorScale to hue range
+        const baseHue = 120; // Green base
+        const hueRange = colorScale * 240; // 0-240 hue shift based on colorScale
+        const hue = (i / amplifiedData.length) * hueRange + baseHue;
+        const saturation = Math.max(50, 100 - (barHeight / height) * 30);
+        const lightness = Math.max(30, 60 - (barHeight / height) * 20);
         
         const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
-        gradient.addColorStop(0, '#00ff00');
-        gradient.addColorStop(1, '#006600');
+        gradient.addColorStop(0, `hsl(${hue % 360}, ${saturation}%, ${lightness + 20}%)`);
+        gradient.addColorStop(1, `hsl(${hue % 360}, ${saturation}%, ${lightness}%)`);
         
         ctx.fillStyle = gradient;
-        ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+        ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
         
-        ctx.shadowColor = '#00ff00';
-        ctx.shadowBlur = 10;
-        ctx.strokeStyle = '#00ff00';
-        ctx.strokeRect(x, height - barHeight, barWidth, barHeight);
+        // Enhanced glow effect
+        ctx.shadowColor = `hsl(${hue % 360}, 100%, 50%)`;
+        ctx.shadowBlur = 15 + (barHeight / height) * 15;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        
+        ctx.strokeStyle = `hsl(${hue % 360}, 100%, 60%)`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, height - barHeight, barWidth - 1, barHeight);
         ctx.shadowBlur = 0;
         
-        x += barWidth + 1;
+        x += barWidth;
       }
+      
+      // Store for smoothing
+      lastFrequencyRef.current = new Uint8Array(amplifiedData);
     };
     
     const drawSoundWaves = () => {
+      const sliceWidth = width / amplifiedData.length;
+      const centerY = height / 2;
+      
+      // Calculate average frequency for wave amplitude
+      const avgFreq = amplifiedData.reduce((a, b) => a + b, 0) / amplifiedData.length;
+      const waveAmplitude = (avgFreq / 255) * (height * 0.35);
+      
+      // Draw main wave
       ctx.beginPath();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#00ff00';
+      ctx.lineWidth = 3;
       
-      const sliceWidth = width / frequencyData.length;
+      const hue = colorScale * 360;
+      ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
+      
       let x = 0;
-      
-      for (let i = 0; i < frequencyData.length; i++) {
-        const v = frequencyData[i] / 255;
-        const y = (v * height) / 2;
+      for (let i = 0; i < amplifiedData.length; i++) {
+        const v = amplifiedData[i] / 255;
+        const y = centerY - waveAmplitude * (v - 0.5) * 2;
         
         if (i === 0) {
           ctx.moveTo(x, y);
@@ -165,17 +255,18 @@ const CRTFilePreview = ({ file, onClose }) => {
         
         x += sliceWidth;
       }
-      
       ctx.stroke();
       
+      // Draw mirror wave with glow
       ctx.beginPath();
-      ctx.strokeStyle = '#00aa00';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = `hsl(${(hue + 180) % 360}, 100%, 40%)`;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.6;
       
       x = 0;
-      for (let i = 0; i < frequencyData.length; i++) {
-        const v = frequencyData[i] / 255;
-        const y = height - (v * height) / 2;
+      for (let i = 0; i < amplifiedData.length; i++) {
+        const v = amplifiedData[i] / 255;
+        const y = centerY + waveAmplitude * (v - 0.5) * 2;
         
         if (i === 0) {
           ctx.moveTo(x, y);
@@ -185,34 +276,91 @@ const CRTFilePreview = ({ file, onClose }) => {
         
         x += sliceWidth;
       }
-      
       ctx.stroke();
+      ctx.globalAlpha = 1;
+      
+      // Draw fill between waves
+      ctx.fillStyle = `hsla(${hue}, 100%, 50%, 0.1)`;
+      ctx.fill();
     };
     
     const drawParticles = () => {
       const centerX = width / 2;
       const centerY = height / 2;
-      const maxRadius = Math.min(width, height) / 2 - 20;
+      const maxRadius = Math.min(width, height) / 2.5;
       
-      for (let i = 0; i < frequencyData.length; i += 4) {
-        const amplitude = frequencyData[i] / 255;
-        const angle = (i / frequencyData.length) * Math.PI * 2;
-        const radius = amplitude * maxRadius;
+      // Initialize particles if needed - one particle per frequency bin for full coverage
+      if (particleDataRef.current.length === 0) {
+        for (let i = 0; i < amplifiedData.length; i++) {
+          particleDataRef.current.push({
+            index: i,
+            radius: 0,
+            velocity: 0,
+            targetRadius: 0,
+            decay: 0.92
+          });
+        }
+      }
+      
+      // Update particles based on frequency - each particle gets its own frequency bin
+      for (let i = 0; i < particleDataRef.current.length && i < amplifiedData.length; i++) {
+        const particle = particleDataRef.current[i];
+        const amplitude = amplifiedData[i] / 255;
         
-        const x = centerX + Math.cos(angle) * radius;
-        const y = centerY + Math.sin(angle) * radius;
+        // Target radius with smooth easing
+        particle.targetRadius = amplitude * maxRadius;
         
-        const size = 2 + amplitude * 8;
-        const hue = (i / frequencyData.length) * 120 + 90;
+        // Smooth follow with momentum
+        particle.radius = particle.radius * 0.7 + particle.targetRadius * 0.3;
         
-        ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+        // Calculate velocity for motion trails
+        particle.velocity = particle.targetRadius - particle.radius;
+      }
+      
+      // Draw particles with trails
+      for (let i = 0; i < particleDataRef.current.length && i < amplifiedData.length; i++) {
+        const particle = particleDataRef.current[i];
+        const angle = (i / amplifiedData.length) * Math.PI * 2;
+        
+        const x = centerX + Math.cos(angle) * particle.radius;
+        const y = centerY + Math.sin(angle) * particle.radius;
+        
+        // Size based on frequency and velocity
+        const baseSize = 3 + particle.radius / maxRadius * 12;
+        const velocitySize = Math.abs(particle.velocity) * 5;
+        const size = baseSize + velocitySize;
+        
+        // Dynamic color based on colorScale
+        const hueRange = colorScale * 360;
+        const baseHue = (i / amplifiedData.length) * hueRange + 120;
+        const saturation = 100;
+        const lightness = 50 + Math.sin(Date.now() * 0.003 + i) * 20;
+        
+        // Draw particle with glow
+        ctx.fillStyle = `hsl(${baseHue % 360}, ${saturation}%, ${lightness}%)`;
+        ctx.shadowColor = `hsl(${baseHue % 360}, 100%, 50%)`;
+        ctx.shadowBlur = 20 + size * 2;
+        
         ctx.beginPath();
         ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
         
-        ctx.shadowColor = `hsl(${hue}, 100%, 50%)`;
-        ctx.shadowBlur = 10;
-        ctx.fill();
+        // Draw motion trails
+        if (Math.abs(particle.velocity) > 5) {
+          ctx.globalAlpha = 0.4;
+          ctx.fillStyle = `hsl(${baseHue % 360}, ${saturation}%, ${lightness - 20}%)`;
+          
+          const trailLength = Math.abs(particle.velocity) * 3;
+          const trailX = x - Math.cos(angle) * trailLength;
+          const trailY = y - Math.sin(angle) * trailLength;
+          
+          ctx.beginPath();
+          ctx.arc(trailX, trailY, size * 0.6, 0, Math.PI * 2);
+          ctx.fill();
+          
+          ctx.globalAlpha = 1;
+        }
+        
         ctx.shadowBlur = 0;
       }
     };
@@ -230,7 +378,7 @@ const CRTFilePreview = ({ file, onClose }) => {
       default:
         drawSoundBars();
     }
-  }, [frequencyData, visualEffect, previewMode]);
+  }, [frequencyData, visualEffect, previewMode, colorScale, sensitivity]);
 
   const determinePreviewMode = async (file) => {
     setIsLoading(true);
@@ -531,6 +679,46 @@ const CRTFilePreview = ({ file, onClose }) => {
                     <option value="waves">Sound Waves</option>
                     <option value="particles">Particles</option>
                   </select>
+                  <button 
+                    className={styles.fullscreenBtn}
+                    onClick={() => setIsVisualizerFullscreen(true)}
+                    title="Expand to fullscreen"
+                  >
+                    [⛶]
+                  </button>
+                </div>
+                
+                {/* Visualization Controls */}
+                <div className={styles.visualizationControls}>
+                  <div className={styles.controlRow}>
+                    <label className={styles.controlLabel}>Color Scale</label>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="1" 
+                      step="0.05"
+                      value={colorScale}
+                      onChange={(e) => setColorScale(parseFloat(e.target.value))}
+                      className={styles.controlSlider}
+                      title="Adjust color spectrum"
+                    />
+                    <span className={styles.controlValue}>{Math.round(colorScale * 100)}%</span>
+                  </div>
+                  
+                  <div className={styles.controlRow}>
+                    <label className={styles.controlLabel}>Sensitivity</label>
+                    <input 
+                      type="range" 
+                      min="0.5" 
+                      max="2" 
+                      step="0.1"
+                      value={sensitivity}
+                      onChange={(e) => setSensitivity(parseFloat(e.target.value))}
+                      className={styles.controlSlider}
+                      title="Adjust amplitude sensitivity"
+                    />
+                    <span className={styles.controlValue}>{sensitivity.toFixed(1)}x</span>
+                  </div>
                 </div>
               </div>
               <div className={styles.audioInfo}>
@@ -541,6 +729,62 @@ const CRTFilePreview = ({ file, onClose }) => {
                     {formatFileSize(file?.rawSize || 0)} • {file?.kind}
                   </div>
                 </div>
+              </div>
+
+              {/* Playlist Panel */}
+              <div className={styles.playlistPanelContainer}>
+                <button 
+                  className={styles.playlistPanelToggle}
+                  onClick={() => setShowPlaylistPanel(!showPlaylistPanel)}
+                  title="Toggle playlist panel"
+                >
+                  {showPlaylistPanel ? '▼' : '▶'} PLAYLIST ({currentPlaylist.length})
+                </button>
+
+                {showPlaylistPanel && (
+                  <div className={styles.playlistPanel}>
+                    <div className={styles.playlistAvailable}>
+                      <div className={styles.playlistSectionTitle}>Available Audio Files ({allAudioFiles.length})</div>
+                      <div className={styles.availableList}>
+                        {allAudioFiles.map((audioFile, idx) => {
+                          const isInPlaylist = currentPlaylist.some(p => p.name === audioFile.name);
+                          return (
+                            <div key={idx} className={styles.availableItem}>
+                              <span className={styles.itemName}>{audioFile.name}</span>
+                              <button
+                                className={styles.addToPlaylistBtn}
+                                onClick={() => onAddToPlaylist && onAddToPlaylist(audioFile)}
+                                disabled={isInPlaylist}
+                                title={isInPlaylist ? 'Already in playlist' : 'Add to playlist'}
+                              >
+                                {isInPlaylist ? '✓' : '+'}
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {allAudioFiles.length === 0 && (
+                          <div className={styles.emptyMessage}>No audio files in directory</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className={styles.playlistCurrent}>
+                      <div className={styles.playlistSectionTitle}>Current Playlist ({currentPlaylist.length})</div>
+                      <div className={styles.currentList}>
+                        {currentPlaylist.map((track, idx) => (
+                          <div key={idx} className={styles.playlistItemInPanel}>
+                            <span className={styles.itemNumber}>{idx + 1}.</span>
+                            <span className={styles.itemName}>{track.name}</span>
+                            <span className={styles.itemSize}>{formatFileSize(track.rawSize || 0)}</span>
+                          </div>
+                        ))}
+                        {currentPlaylist.length === 0 && (
+                          <div className={styles.emptyMessage}>Playlist is empty</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               <audio
                 ref={audioRef}
@@ -807,6 +1051,79 @@ const CRTFilePreview = ({ file, onClose }) => {
           )}
         </div>
       </div>
+
+      {/* Fullscreen Visualizer */}
+      {isVisualizerFullscreen && previewMode === 'audio' && (
+        <div 
+          className={styles.fullscreenVisualizerOverlay} 
+          onClick={(e) => {
+            // Only close if clicking the overlay background itself
+            if (e.target === e.currentTarget) {
+              setIsVisualizerFullscreen(false);
+            }
+          }}
+        >
+          <div className={styles.fullscreenVisualizerContainer}>
+            <button 
+              className={styles.exitFullscreenBtn}
+              onClick={() => setIsVisualizerFullscreen(false)}
+              title="Exit fullscreen (ESC)"
+            >
+              ✕ EXIT
+            </button>
+            
+            <canvas
+              ref={canvasRef}
+              width={window.innerWidth - 40}
+              height={window.innerHeight - 100}
+              className={styles.fullscreenCanvas}
+            />
+            
+            <div className={styles.fullscreenControls}>
+              <div className={styles.controlRow}>
+                <label className={styles.controlLabel}>Color Scale</label>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="1" 
+                  step="0.05"
+                  value={colorScale}
+                  onChange={(e) => setColorScale(parseFloat(e.target.value))}
+                  className={styles.controlSlider}
+                />
+                <span className={styles.controlValue}>{Math.round(colorScale * 100)}%</span>
+              </div>
+              
+              <div className={styles.controlRow}>
+                <label className={styles.controlLabel}>Sensitivity</label>
+                <input 
+                  type="range" 
+                  min="0.5" 
+                  max="2" 
+                  step="0.1"
+                  value={sensitivity}
+                  onChange={(e) => setSensitivity(parseFloat(e.target.value))}
+                  className={styles.controlSlider}
+                />
+                <span className={styles.controlValue}>{sensitivity.toFixed(1)}x</span>
+              </div>
+
+              <div className={styles.controlRow}>
+                <label className={styles.controlLabel}>Effect</label>
+                <select 
+                  value={visualEffect} 
+                  onChange={(e) => setVisualEffect(e.target.value)}
+                  className={styles.effectSelectFullscreen}
+                >
+                  <option value="soundbars">Sound Bars</option>
+                  <option value="waves">Sound Waves</option>
+                  <option value="particles">Particles</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

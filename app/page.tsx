@@ -8,8 +8,8 @@ export default function Home() {
   return (
     <div>
       <Head>
-        <title>Vintage CRT File Explorer</title>
-        <meta name="description" content="Vintage CRT-style file explorer" />
+        <title>Explora</title>
+        <meta name="description" content="Explora" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
